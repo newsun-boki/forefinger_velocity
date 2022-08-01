@@ -1,0 +1,42 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>websocket通信客户端</title>
+    <!-- <script src="jquery-3.5.0.min.js"></script> -->
+    <script type="text/javascript">
+        function WebSocketTest() {
+            if ("WebSocket" in window) {
+                // 打开一个 web socket
+                var ws = new WebSocket("ws://10.173.87.197:8765");
+                // 连接建立后的回调函数
+                ws.onopen = function () {
+                    // Web Socket 已连接上，使用 send() 方法发送数据
+                    ws.send("Hello world!");
+                    // $("#main").append("<p>" + "<=" + "Hello world!" + "</p>")
+                };
+
+                // 接收到服务器消息后的回调函数
+                ws.onmessage = function (evt) {
+                    var received_msg = evt.data;
+                    if (received_msg.indexOf("sorry") == -1) {
+                        // $("#main").append("<p>" + "=>" + received_msg + "</p>")
+                    }
+                };
+                // 连接关闭后的回调函数
+                ws.onclose = function () {
+                    // 关闭 websocket
+                    alert("连接已关闭...");
+                };
+            } else {
+                // 浏览器不支持 WebSocket
+                alert("您的浏览器不支持 WebSocket!");
+            }
+        }
+    </script>
+</head>
+<body onload="WebSocketTest()">
+<div id="main">
+</div>
+</body>
+</html>
