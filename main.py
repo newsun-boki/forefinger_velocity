@@ -10,10 +10,10 @@ from matplotlib.pyplot import draw
 import numpy as np
 
 forefinger_pos_list = []
-forefinger_v_list = []
+forefinger_v_list = np.array([0.0, 0.0, 0.0])
 smooth_pos_list = []
-mean_v_list = []
-last_point = [0,0]
+mean_v_list = np.array([0.0, 0.0, 0.0])
+last_point = np.array([0.0, 0.0, 0.0])
 delta_time = 0
 threadLock = threading.Lock()
 #param
@@ -29,24 +29,29 @@ class Observer(threading.Thread):
         self.pred = 0
         self.main_point = np.array([0,0]);
     def calculatePoints(self):
-        if(len(mean_v_list) != 0):
-            current_point = np.array(forefinger_pos_list[-1])
-            current_mean = np.array(mean_v_list[-1])
-            current_time = time.time()
-            delta_time = (current_time - self.last_time)*1000;
-            print(str(current_time),' ',str(delta_time))
-            if(self.main_point.all() != current_point.all()):
-                self.main_point = current_point
-                self.pred = current_point + current_mean * delta_time
-            else:
-                self.pred = self.pred + current_mean * delta_time
-                # print(self.pred)
-            threadLock.acquire()
-            smooth_pos_list.append(self.pred)
-            if(len(smooth_pos_list) > 30):
-                del(smooth_pos_list[-1])
-            threadLock.release()
-            self.last_time = current_time
+        if(len(forefinger_pos_list) > 1):
+            current_time = time.time_ns()
+            delta_time = (current_time - self.last_time)/10e6;
+            if(delta_time > 0):
+                current_point = np.array(forefinger_pos_list[-1])
+                current_mean = np.array(mean_v_list[-1])
+                print(current_point)
+                if(self.main_point[0] != current_point[0]):
+                    self.main_point = current_point
+                    self.pred = current_point + current_mean * delta_time
+                    # print(self.pred)
+
+                else:
+                    self.pred = self.pred + current_mean * delta_time
+                threadLock.acquire()
+                # print(str(type(self.pred))," " , str(self.pred))
+                if(abs(self.pred[0]) < 2e3):
+                    # print(self.pred)
+                    smooth_pos_list.append(self.pred)
+                if(len(smooth_pos_list) > 300):
+                    del(smooth_pos_list[0])
+                threadLock.release()
+                self.last_time = current_time
     def run(self):
         while True:
             # print ("开始线程：" + self.name)
@@ -54,31 +59,36 @@ class Observer(threading.Thread):
             
 
 def velocityFilter(forefinger_pos, last_point, delta_time):
-    forefinger_v = math.sqrt(math.pow(forefinger_pos[0] - last_point[0],2) + math.pow(forefinger_pos[1] - last_point[1],2)) / delta_time
-    forefinger_v_list.append(forefinger_v)
-    if(len(forefinger_v_list) > 3): # save 30 forefinger velocity
-        del(forefinger_v_list[0])
-    mean_v = sum(forefinger_v_list)/len(forefinger_v_list)
-    last_point = forefinger_pos
+    forefinger_v_x = (forefinger_pos[0] - last_point[0]) / delta_time
+    forefinger_v_y = (forefinger_pos[1] - last_point[1])/ delta_time
+    forefinger_v_z = (forefinger_pos[2] - last_point[2])/ delta_time
+    global forefinger_v_list
+    forefinger_v_list = np.vstack([forefinger_v_list, np.array([forefinger_v_x,forefinger_v_y,forefinger_v_z])])
+    if(forefinger_v_list.shape[0] > 4): # save 30 forefinger velocity
+        forefinger_v_list = np.delete(forefinger_v_list, 0, axis=0)
+    mean_v = np.mean(forefinger_v_list,axis=0)
+    last_point[0] = forefinger_pos[0]
+    last_point[1] = forefinger_pos[1]
+    last_point[2] = forefinger_pos[2]
     return mean_v
 
 def drawTrace(mean_v,img):
     img = cv2.circle(img,(forefinger_pos_list[-1][0],forefinger_pos_list[-1][1]),10,(255,0,0),-1) #draw current forefinger
     for p in smooth_pos_list:
         forefinger_v = mean_v
-        print(p)
-        # print(forefinger_v)
         # forefinger_v = 255 / (1 + math.exp(-forefinger_v))
         # img = cv2.line(img,(last_point[0],last_point[1]),(p[0],p[1]),(forefinger_v,forefinger_v,forefinger_v),2)
-        # img = cv2.circle(img,(p[0],p[1]),4,(0,255,0),-1)
+        img = cv2.circle(img,(int(p[0]),int(p[1])),4,(0,255,0),-1)
         # last_point = p
-    # for p in forefinger_pos_list:
+    for p in forefinger_pos_list:
     #     forefinger_v = mean_v
-    #     # print(forefinger_v)
+        # print(forefinger_v)
     #     # forefinger_v = 255 / (1 + math.exp(-forefinger_v))
     #     # img = cv2.line(img,(last_point[0],last_point[1]),(p[0],p[1]),(forefinger_v,forefinger_v,forefinger_v),2)
-    #     img = cv2.circle(img,(p[0],p[1]),4,(255,0,0),-1)
+        img = cv2.circle(img,(p[0],p[1]),4,(255,0,0),-1)
     #     # last_point = p
+    
+    
     
 
 def Main():
@@ -110,17 +120,16 @@ def Main():
                 del(forefinger_pos_list[0])
 
             #get timestamp 
-            current_time = time.time() 
-            delta_time = (current_time - last_time)*1000
+            current_time = time.time_ns() 
+            delta_time = (current_time - last_time)/10e6
 
             #compute velocity
             mean_v = velocityFilter(forefinger_pos, last_point, delta_time)
-            mean_v_list.append(mean_v)
+            global mean_v_list
+            mean_v_list = np.vstack([mean_v_list,mean_v])
             if(len(mean_v_list) > 30): # save 30 mean_v
-                del(mean_v_list[0])
-
-            # drawTrace(mean_v,img)
-
+                mean_v_list = np.delete(mean_v_list,0,axis=0)
+            drawTrace(mean_v,img)
         img=cv2.resize(img,(0,0),None,0.5,0.5)
         last_time = current_time
         cv2.imshow("image",img)
