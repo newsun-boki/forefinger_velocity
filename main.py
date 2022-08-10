@@ -11,9 +11,12 @@ import numpy as np
 
 forefinger_pos_list = []
 forefinger_v_list = np.array([0.0, 0.0, 0.0])
+forefinger_a_list = np.array([0.0, 0.0, 0.0])
 smooth_pos_list = []
+mean_a = 0
 mean_v_list = np.array([0.0, 0.0, 0.0])
 last_point = np.array([0.0, 0.0, 0.0])
+last_v = np.array([0.0, 0.0, 0.0])
 delta_time = 0
 threadLock = threading.Lock()
 #param
@@ -27,22 +30,28 @@ class Observer(threading.Thread):
         self.points = []
         self.last_time = 0
         self.pred = 0
-        self.main_point = np.array([0,0]);
+        self.main_point = np.array([0,0,0]);
+        self.main_v = np.array([0,0,0]);
+        self.pred_v = 0
     def calculatePoints(self):
+        global mean_a
         if(len(forefinger_pos_list) > 1):
             current_time = time.time_ns()
             delta_time = (current_time - self.last_time)/10e6;
             if(delta_time > 0):
                 current_point = np.array(forefinger_pos_list[-1])
-                current_mean = np.array(mean_v_list[-1])
-                print(current_point)
+                current_mean_v = np.array(mean_v_list[-1])
+                current_mean_a = np.array(mean_a)
+                print(current_mean_a)
                 if(self.main_point[0] != current_point[0]):
                     self.main_point = current_point
-                    self.pred = current_point + current_mean * delta_time
+                    self.main_v = current_mean_v
+                    self.pred = current_point + current_mean_v * delta_time 
+                    self.pred_v = current_mean_v + current_mean_a * delta_time
                     # print(self.pred)
-
                 else:
-                    self.pred = self.pred + current_mean * delta_time
+                    self.pred = self.pred + self.pred_v * delta_time # + 0.5 * current_mean_a *delta_time*delta_time
+                    self.pred_v = self.pred_v + current_mean_a * delta_time
                 threadLock.acquire()
                 # print(str(type(self.pred))," " , str(self.pred))
                 if(abs(self.pred[0]) < 2e3):
@@ -64,13 +73,28 @@ def velocityFilter(forefinger_pos, last_point, delta_time):
     forefinger_v_z = (forefinger_pos[2] - last_point[2])/ delta_time
     global forefinger_v_list
     forefinger_v_list = np.vstack([forefinger_v_list, np.array([forefinger_v_x,forefinger_v_y,forefinger_v_z])])
-    if(forefinger_v_list.shape[0] > 4): # save 30 forefinger velocity
+    if(forefinger_v_list.shape[0] > 3): # save 30 forefinger velocity
         forefinger_v_list = np.delete(forefinger_v_list, 0, axis=0)
     mean_v = np.mean(forefinger_v_list,axis=0)
     last_point[0] = forefinger_pos[0]
     last_point[1] = forefinger_pos[1]
     last_point[2] = forefinger_pos[2]
+
+    # accelerator
     return mean_v
+def acceleratorFilter(mean_v, last_v, delta_time):
+    forefinger_a_x = (mean_v[0] - last_v[0]) / delta_time
+    forefinger_a_y = (mean_v[1] - last_v[1])/ delta_time
+    forefinger_a_z = (mean_v[2] - last_v[2])/ delta_time
+    global forefinger_a_list
+    forefinger_a_list = np.vstack([forefinger_a_list, np.array([forefinger_a_x,forefinger_a_y,forefinger_a_z])])
+    if(forefinger_a_list.shape[0] > 5): # save 30 forefinger velocity
+        forefinger_a_list = np.delete(forefinger_a_list, 0, axis=0)
+    mean_a = np.mean(forefinger_a_list,axis=0)
+    last_v[0] = mean_v[0]
+    last_v[1] = mean_v[1]
+    last_v[2] = mean_v[2]
+    return mean_a
 
 def drawTrace(mean_v,img):
     img = cv2.circle(img,(forefinger_pos_list[-1][0],forefinger_pos_list[-1][1]),10,(255,0,0),-1) #draw current forefinger
@@ -100,6 +124,7 @@ def Main():
     detector = HandDetector(maxHands=1,detectionCon=0.8)
     last_time = 0
     global delta_time
+    global mean_a
     current_time = 0
     observer = Observer(1,"Observer",1)
     observer.setDaemon(True)
@@ -125,6 +150,7 @@ def Main():
 
             #compute velocity
             mean_v = velocityFilter(forefinger_pos, last_point, delta_time)
+            mean_a = acceleratorFilter(mean_v, last_v, delta_time)
             global mean_v_list
             mean_v_list = np.vstack([mean_v_list,mean_v])
             if(len(mean_v_list) > 30): # save 30 mean_v
