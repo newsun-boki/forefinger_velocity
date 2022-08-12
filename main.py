@@ -1,4 +1,5 @@
 from asyncio import Handle
+from re import X
 from turtle import width
 import cv2
 import socket
@@ -9,6 +10,8 @@ import threading
 from matplotlib.pyplot import draw
 import numpy as np
 
+
+forefinger_campos_list = []
 forefinger_pos_list = []
 forefinger_v_list = np.array([0.0, 0.0, 0.0])
 forefinger_a_list = np.array([0.0, 0.0, 0.0])
@@ -20,7 +23,7 @@ last_v = np.array([0.0, 0.0, 0.0])
 delta_time = 0
 threadLock = threading.Lock()
 #param
-width,height = 1280,720
+width,height = 640,480
 class Observer(threading.Thread):
     def __init__(self, threadID, name, delay):
         threading.Thread.__init__(self)
@@ -42,7 +45,6 @@ class Observer(threading.Thread):
                 current_point = np.array(forefinger_pos_list[-1])
                 current_mean_v = np.array(mean_v_list[-1])
                 current_mean_a = np.array(mean_a)
-                print(current_mean_a)
                 if(self.main_point[0] != current_point[0]):
                     self.main_point = current_point
                     self.main_v = current_mean_v
@@ -50,14 +52,14 @@ class Observer(threading.Thread):
                     self.pred_v = current_mean_v + current_mean_a * delta_time
                     # print(self.pred)
                 else:
-                    self.pred = self.pred + self.pred_v * delta_time # + 0.5 * current_mean_a *delta_time*delta_time
+                    self.pred = self.pred + self.pred_v * delta_time * 1.1 + 0.5 * current_mean_a *delta_time
                     self.pred_v = self.pred_v + current_mean_a * delta_time
                 threadLock.acquire()
-                # print(str(type(self.pred))," " , str(self.pred))
+                print(str(self.pred_v))
                 if(abs(self.pred[0]) < 2e3):
                     # print(self.pred)
                     smooth_pos_list.append(self.pred)
-                if(len(smooth_pos_list) > 300):
+                if(len(smooth_pos_list) > 500):
                     del(smooth_pos_list[0])
                 threadLock.release()
                 self.last_time = current_time
@@ -96,26 +98,38 @@ def acceleratorFilter(mean_v, last_v, delta_time):
     last_v[2] = mean_v[2]
     return mean_a
 
-def drawTrace(mean_v,img):
-    img = cv2.circle(img,(forefinger_pos_list[-1][0],forefinger_pos_list[-1][1]),10,(255,0,0),-1) #draw current forefinger
+def drawTrace(mean_v_list,img):
+    img = cv2.circle(img,(forefinger_pos_list[-1][0],forefinger_pos_list[-1][1]),10,(0,255,0),-1) #draw current forefinger
     for p in smooth_pos_list:
-        forefinger_v = mean_v
+        # forefinger_v = mean_v
         # forefinger_v = 255 / (1 + math.exp(-forefinger_v))
         # img = cv2.line(img,(last_point[0],last_point[1]),(p[0],p[1]),(forefinger_v,forefinger_v,forefinger_v),2)
         img = cv2.circle(img,(int(p[0]),int(p[1])),4,(0,255,0),-1)
         # last_point = p
-    for p in forefinger_pos_list:
-    #     forefinger_v = mean_v
-        # print(forefinger_v)
-    #     # forefinger_v = 255 / (1 + math.exp(-forefinger_v))
-    #     # img = cv2.line(img,(last_point[0],last_point[1]),(p[0],p[1]),(forefinger_v,forefinger_v,forefinger_v),2)
-        img = cv2.circle(img,(p[0],p[1]),4,(255,0,0),-1)
-    #     # last_point = p
-    
+    for i in range(len(forefinger_pos_list)):
+        p = forefinger_pos_list[i]
+        v = mean_v_list[i]
+        v = np.sqrt((v*v).sum())  * 35
+        print(v)
+        img = cv2.circle(img,(int(p[0]),int(p[1])),4,(255 - int(v),0,int(v)),-1)
+
+def pixel2cam(forefinger_pos, z_cam, camera_matrix):
+    x_cam =z_cam / camera_matrix[0,0] * (forefinger_pos[0] - camera_matrix[0,2])
+    y_cam = z_cam / camera_matrix[1,1] * (forefinger_pos[1] - camera_matrix[1,2])
+    return x_cam, y_cam
     
     
 
 def Main():
+    z_cam = 470
+    camera_matrix = np.zeros((3, 3))
+    camera_matrix[0, 0] = 609.592345495693
+    camera_matrix[1, 1] = 608.224584386026
+    camera_matrix[0, 2] = 319.829953439972
+    camera_matrix[1, 2] = 236.764106807809
+    camera_matrix[2, 2] = 1
+    distCoeffs = np.float32([-0.455846898828797,0.263364196795679,0, 0])
+    
     #video setting
     cap = cv2.VideoCapture(1)
     cap.set(3,width)
@@ -126,11 +140,12 @@ def Main():
     global delta_time
     global mean_a
     current_time = 0
-    observer = Observer(1,"Observer",1)
-    observer.setDaemon(True)
-    observer.start()
+    # observer = Observer(1,"Observer",1)
+    # observer.setDaemon(True)
+    # observer.start()
     while True:
         success,img = cap.read()
+        img = cv2.undistort(img,camera_matrix,distCoeffs)
         hands,img = detector.findHands(img)
     # landmark values - (x,y,z)*21
         if hands: 
@@ -143,20 +158,24 @@ def Main():
             forefinger_pos_list.append(forefinger_pos)
             if(len(forefinger_pos_list) > 30): # save 30 forefinger pos
                 del(forefinger_pos_list[0])
-
+            x_cam, y_cam = pixel2cam(forefinger_pos,z_cam,camera_matrix)
+            forefinger_campos = [x_cam,y_cam,z_cam]
+            forefinger_campos_list.append(forefinger_campos)
             #get timestamp 
             current_time = time.time_ns() 
             delta_time = (current_time - last_time)/10e6
 
             #compute velocity
-            mean_v = velocityFilter(forefinger_pos, last_point, delta_time)
+            mean_v = velocityFilter(forefinger_campos, last_point, delta_time)
             mean_a = acceleratorFilter(mean_v, last_v, delta_time)
             global mean_v_list
             mean_v_list = np.vstack([mean_v_list,mean_v])
             if(len(mean_v_list) > 30): # save 30 mean_v
                 mean_v_list = np.delete(mean_v_list,0,axis=0)
-            drawTrace(mean_v,img)
-        img=cv2.resize(img,(0,0),None,0.5,0.5)
+            drawTrace(mean_v_list,img)
+
+
+        # img=cv2.resize(img,(0,0),None,0.5,0.5)
         last_time = current_time
         cv2.imshow("image",img)
         cv2.waitKey(1)
