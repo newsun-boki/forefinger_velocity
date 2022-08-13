@@ -7,15 +7,16 @@ from cvzone.HandTrackingModule import HandDetector
 import time
 import math
 import threading
-from matplotlib.pyplot import draw
+# from matplotlib.pyplot import draw
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 forefinger_campos_list = []
 forefinger_pos_list = []
 forefinger_v_list = np.array([0.0, 0.0, 0.0])
 forefinger_a_list = np.array([0.0, 0.0, 0.0])
 smooth_pos_list = []
+smooth_v_list = []
 mean_a = 0
 mean_v_list = np.array([0.0, 0.0, 0.0])
 last_point = np.array([0.0, 0.0, 0.0])
@@ -52,17 +53,32 @@ class Observer(threading.Thread):
                     self.pred_v = current_mean_v + current_mean_a * delta_time
                     # print(self.pred)
                 else:
-                    self.pred = self.pred + self.pred_v * delta_time * 1.1 + 0.5 * current_mean_a *delta_time
-                    self.pred_v = self.pred_v + current_mean_a * delta_time
+                    self.pred = self.pred + self.pred_v * delta_time + current_mean_a *delta_time *delta_time
+                    self.pred_v = self.pred_v +  current_mean_a * delta_time
+                    print(self.pred_v[1]/self.pred_v[0],current_mean_a[1]/current_mean_a[0])
+                    prev_len = np.sqrt((self.pred_v*self.pred_v).sum())
+                    norm_prev = self.pred_v / prev_len
+                    a_len = np.sqrt((current_mean_a*current_mean_a).sum())
+                    norm_a = current_mean_a / a_len
+                    prev = 0.95 * norm_prev + 0.05 * norm_a
+                    self.pred_v = prev / np.sqrt((prev*prev).sum()) * np.sqrt((self.pred_v*self.pred_v).sum())
+
+                    
                 threadLock.acquire()
-                print(str(self.pred_v))
                 if(abs(self.pred[0]) < 2e3):
                     # print(self.pred)
                     smooth_pos_list.append(self.pred)
+                    smooth_v_list.append(self.pred_v)
                 if(len(smooth_pos_list) > 500):
                     del(smooth_pos_list[0])
+                if(len(smooth_v_list) > 500):
+                    del(smooth_v_list[0])
                 threadLock.release()
                 self.last_time = current_time
+    def smoothPlot():
+        v = smooth_v_list[-1]
+        v = np.sqrt((v*v).sum())  * 35
+        img = cv2.circle(img,(int(p[0]),int(p[1])),4,(255 - int(v),0,int(v)),-1)
     def run(self):
         while True:
             # print ("开始线程：" + self.name)
@@ -110,7 +126,6 @@ def drawTrace(mean_v_list,img):
         p = forefinger_pos_list[i]
         v = mean_v_list[i]
         v = np.sqrt((v*v).sum())  * 35
-        print(v)
         img = cv2.circle(img,(int(p[0]),int(p[1])),4,(255 - int(v),0,int(v)),-1)
 
 def pixel2cam(forefinger_pos, z_cam, camera_matrix):
@@ -118,9 +133,25 @@ def pixel2cam(forefinger_pos, z_cam, camera_matrix):
     y_cam = z_cam / camera_matrix[1,1] * (forefinger_pos[1] - camera_matrix[1,2])
     return x_cam, y_cam
     
-    
+def plotdata():
+    if(len(forefinger_pos_list) > 28):
+        plt.clf()
+        plt.xlim((0, 480))
+        plt.ylim((0, 640))
+        # plt.plot(np.arange(len(forefinger_pos_list)), np.array(forefinger_pos_list)[:,0])
+        v = mean_v_list[-1]
+        v = np.sqrt((v*v).sum())
+        if v > 5 : 
+            v = 1
+        else: 
+            v = v / 5
+        plt.plot(np.array(forefinger_pos_list)[:,0],640 - np.array(forefinger_pos_list)[:,1], color = (v,0,1 - v))
+        plt.draw()
+        plt.pause(0.01)
 
 def Main():
+    plt.ion()
+    plt.figure(1)
     z_cam = 470
     camera_matrix = np.zeros((3, 3))
     camera_matrix[0, 0] = 609.592345495693
@@ -140,9 +171,9 @@ def Main():
     global delta_time
     global mean_a
     current_time = 0
-    # observer = Observer(1,"Observer",1)
+    observer = Observer(1,"Observer",1)
     # observer.setDaemon(True)
-    # observer.start()
+    observer.start()
     while True:
         success,img = cap.read()
         img = cv2.undistort(img,camera_matrix,distCoeffs)
@@ -173,6 +204,7 @@ def Main():
             if(len(mean_v_list) > 30): # save 30 mean_v
                 mean_v_list = np.delete(mean_v_list,0,axis=0)
             drawTrace(mean_v_list,img)
+            # plotdata()
 
 
         # img=cv2.resize(img,(0,0),None,0.5,0.5)
