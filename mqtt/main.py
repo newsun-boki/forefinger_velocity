@@ -1,8 +1,4 @@
-from asyncio import Handle
-from re import X
-from turtle import width
 import cv2
-import socket
 from cvzone.HandTrackingModule import HandDetector
 import time
 import math
@@ -10,6 +6,16 @@ import threading
 # from matplotlib.pyplot import draw
 import numpy as np
 import matplotlib.pyplot as plt
+import random
+import time
+from paho.mqtt import client as mqtt_client
+import json
+from datetime import datetime
+
+broker = 'broker.emqx.io'
+port = 1883
+topic = "/python/mqtt/li"
+client_id = f'python-mqtt-{random.randint(0, 1000)}'  # 随机生成客户端id
 
 forefinger_campos_list = []
 forefinger_pos_list = []
@@ -25,65 +31,40 @@ delta_time = 0
 threadLock = threading.Lock()
 #param
 width,height = 640,480
-class Observer(threading.Thread):
-    def __init__(self, threadID, name, delay):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-        self.delay = delay
-        self.points = []
-        self.last_time = 0
-        self.pred = 0
-        self.main_point = np.array([0,0,0]);
-        self.main_v = np.array([0,0,0]);
-        self.pred_v = 0
-    def calculatePoints(self):
-        global mean_a
-        if(len(forefinger_pos_list) > 1):
-            current_time = time.time_ns()
-            delta_time = (current_time - self.last_time)/10e6;
-            if(delta_time > 0):
-                current_point = np.array(forefinger_pos_list[-1])
-                current_mean_v = np.array(mean_v_list[-1])
-                current_mean_a = np.array(mean_a)
-                if(self.main_point[0] != current_point[0]):
-                    self.main_point = current_point
-                    self.main_v = current_mean_v
-                    self.pred = current_point + current_mean_v * delta_time 
-                    self.pred_v = current_mean_v + current_mean_a * delta_time
-                    # print(self.pred)
-                else:
-                    self.pred = self.pred + self.pred_v * delta_time + current_mean_a *delta_time *delta_time
-                    self.pred_v = self.pred_v +  current_mean_a * delta_time
-                    print(self.pred_v[1]/self.pred_v[0],current_mean_a[1]/current_mean_a[0])
-                    prev_len = np.sqrt((self.pred_v*self.pred_v).sum())
-                    norm_prev = self.pred_v / prev_len
-                    a_len = np.sqrt((current_mean_a*current_mean_a).sum())
-                    norm_a = current_mean_a / a_len
-                    prev = 0.95 * norm_prev + 0.05 * norm_a
-                    self.pred_v = prev / np.sqrt((prev*prev).sum()) * np.sqrt((self.pred_v*self.pred_v).sum())
 
-                    
-                threadLock.acquire()
-                if(abs(self.pred[0]) < 2e3):
-                    # print(self.pred)
-                    smooth_pos_list.append(self.pred)
-                    smooth_v_list.append(self.pred_v)
-                if(len(smooth_pos_list) > 500):
-                    del(smooth_pos_list[0])
-                if(len(smooth_v_list) > 500):
-                    del(smooth_v_list[0])
-                threadLock.release()
-                self.last_time = current_time
-    def smoothPlot():
-        v = smooth_v_list[-1]
-        v = np.sqrt((v*v).sum())  * 35
-        img = cv2.circle(img,(int(p[0]),int(p[1])),4,(255 - int(v),0,int(v)),-1)
-    def run(self):
-        while True:
-            # print ("开始线程：" + self.name)
-            self.calculatePoints()
-            
+
+def connect_mqtt():
+  def on_connect(client, userdata, flags, rc):
+      if rc == 0:
+          print("Connected to MQTT Broker!")
+      else:
+          print("Failed to connect, return code %d\n", rc)
+
+  client = mqtt_client.Client(client_id)
+  client.on_connect = on_connect
+  client.connect(broker, port)
+  return client
+
+
+def publish(client):
+    v = mean_v_list[-1]
+    v = float(np.sqrt((v*v).sum()))
+    msg = json.dumps({"MAC": "0123456789",
+                        "samplerate": 12,
+                        "sampletime": str(datetime.utcnow().strftime('%Y/%m/%d-%H:%M:%S.%f')[:-3]),
+                        "battery": 0.5,
+                        "acc": v,
+                        "pos": [int(forefinger_pos_list[-1][0]), int(forefinger_pos_list[-1][1]),int(forefinger_pos_list[-1][2])]   
+                        })
+    result = client.publish(topic, msg)
+    status = result[0]
+    if status == 0:
+        print(f"Send `{msg}` to topic `{topic}`")
+    else:
+        print(f"Failed to send message to topic {topic}")
+
+
+
 
 def velocityFilter(forefinger_pos, last_point, delta_time):
     forefinger_v_x = (forefinger_pos[0] - last_point[0]) / delta_time
@@ -171,9 +152,11 @@ def Main():
     global delta_time
     global mean_a
     current_time = 0
-    observer = Observer(1,"Observer",1)
+    # observer = Observer(1,"Observer",1)
     # observer.setDaemon(True)
-    observer.start()
+    # observer.start()
+    client = connect_mqtt()
+
     while True:
         success,img = cap.read()
         img = cv2.undistort(img,camera_matrix,distCoeffs)
@@ -205,6 +188,7 @@ def Main():
                 mean_v_list = np.delete(mean_v_list,0,axis=0)
             drawTrace(mean_v_list,img)
             # plotdata()
+            publish(client)
 
 
         # img=cv2.resize(img,(0,0),None,0.5,0.5)

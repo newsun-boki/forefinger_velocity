@@ -13,15 +13,10 @@ topic = "/python/mqtt/li"
 port = 1883
 client_id = f'python-mqtt-li-{random.randint(0, 100)}'
 
-show_num = 300
+show_num = 100
 
-x_num = [-1]  # 计数
-acc1 = []
-acc2 = []
-acc3 = []
-acc4 = []
-acc5 = []
-acc6 = []
+mean_vs = []
+pos_list = []
 stime = []
 
 
@@ -55,20 +50,10 @@ def parse_mqttmsg(msg):
   sampletime = content['sampletime']
   sampletime_int = str_microsecond_datetime2int_13timestamp(sampletime)
   acc = content['acc']
-  for i in range(len(acc)):
-      x_num.append(x_num[-1] + 1)
-      acc1.append(acc[i][0])
-      acc2.append(acc[i][1])
-      acc3.append(acc[i][2])
-      acc4.append(acc[i][3])
-      acc5.append(acc[i][4])
-      acc6.append(acc[i][5])
-      if i != 0:
-          sampletime_int += time_span[i % 2]
-          stime.append(int2datetime(round(sampletime_int * 1000, 0) / 1000))
-      else:
-          stime.append(sampletime)
-      print(x_num[-1], stime[-1], acc1[-1], acc2[-1], acc3[-1], acc4[-1], acc5[-1], acc6[-1])
+  mean_vs.append(acc)
+  if len(mean_vs) > 100:
+    del(mean_vs[0])
+  pos = content['pos']
 
 
 def connect_mqtt():
@@ -117,26 +102,12 @@ def draw_figure():
 
       # 图表1
       agraphic = plt.subplot(2, 1, 1)
-      agraphic.set_title('子图表标题1')  # 添加子标题
       agraphic.set_xlabel('x轴', fontsize=10)  # 添加轴标签
       agraphic.set_ylabel('y轴', fontsize=20)
-      plt.plot(x_num[1:][-show_num:], acc1[-show_num:], 'g-')
-      try:
-          xtricks = list(range(len(acc1) - show_num, len(acc1), 10))  # **1**
-          xlabels = [stime[i] for i in xtricks]  # **2**
-          plt.xticks(xtricks, xlabels, rotation=15)
-      except:
-          pass
-
-      # 图表2
-      bgraghic = plt.subplot(2, 1, 2)
-      bgraghic.set_title('子图表标题2')
-      bgraghic.set_xlabel('x轴', fontsize=10)  # 添加轴标签
-      bgraghic.set_ylabel('y轴', fontsize=20)
-      bgraghic.plot(x_num[1:][-show_num:], acc2[-show_num:], 'r^')
+      plt.plot(range(len(mean_vs)), mean_vs, 'g-')
+  
 
       plt.pause(0.001)  # 设置暂停时间，太快图表无法正常显示
-      count = count + 1
 
 
 if __name__ == '__main__':
