@@ -11,6 +11,12 @@ import threading
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Process,Queue
+
+import pyqt5graph
+from PyQt5.Qt import *
+from pyqtgraph import PlotWidget
+from PyQt5 import QtCore
+
 forefinger_campos_list = []
 forefinger_pos_list = []
 forefinger_v_list = np.array([0.0, 0.0, 0.0])
@@ -56,7 +62,7 @@ def calculate(campos,delta_time,last_campos,last_camv, last_cama):
     return cam_v,cam_a
 
 #多进程
-def observe(q):
+def observe(q,qv):
 
     last_time_slow = time.time_ns()
     last_time_fast = time.time_ns()
@@ -90,9 +96,23 @@ def observe(q):
             last_time_fast = current_time
         v = np.sqrt((camv_pred*camv_pred).sum())
         camv_list.append(v)
-        print(v)
+        qv.put(v)
+        if(qv.qsize() > 10):
+            qv.get()
         if len(camv_list) > 100:
             del(camv_list[0])
+
+def qtplot(qv:Queue):
+    import sys
+    # PyQt5 程序固定写法
+    app = QApplication(sys.argv)
+
+    # 将绑定了绘图控件的窗口实例化并展示
+    window = pyqt5graph.Window(qv)
+    window.show()
+
+    # PyQt5 程序固定写法
+    sys.exit(app.exec())
 
 def velocityFilter(forefinger_pos, last_point, delta_time):
     forefinger_v_x = (forefinger_pos[0] - last_point[0]) / delta_time
@@ -161,6 +181,7 @@ def Main():
     # plt.ion()
     # plt.figure(1)
     q = Queue()
+    qv = Queue()
     z_cam = 470
     camera_matrix = np.zeros((3, 3))
     camera_matrix[0, 0] = 609.592345495693
@@ -180,8 +201,10 @@ def Main():
     global delta_time
     global mean_a
     current_time = 0
-    p = Process(target=observe,args=(q,))
+    p = Process(target=observe,args=(q,qv))
+    plot = Process(target=qtplot,args=(qv,))
     p.start()
+    plot.start()
     while True:
         success,img = cap.read()
         img = cv2.undistort(img,camera_matrix,distCoeffs)
@@ -214,7 +237,6 @@ def Main():
                 mean_v_list = np.delete(mean_v_list,0,axis=0)
             drawTrace(mean_v_list,img)
             # plotdata()
-
 
         # img=cv2.resize(img,(0,0),None,0.5,0.5)
         last_time = current_time

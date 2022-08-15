@@ -29,16 +29,15 @@ class Window(QWidget):
         # 定时器信号绑定 update_data 函数
         self.timer.timeout.connect(self.update_data)
         # 定时器间隔50ms，可以理解为 50ms 刷新一次数据
-        self.timer.start(10)
+        self.timer.start(50)
 
     # 数据左移
     def update_data(self):
         if self.qv.empty() == False:
             v = self.qv.get()
-            print(v)
             self.vs.append(v)
             if len(self.vs) > 300:
-                del(self.vs[0])
+                del(self[0]
         # 数据填充到绘制曲线中
             self.curve1.setData(self.vs)
 

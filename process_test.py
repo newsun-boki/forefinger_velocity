@@ -3,7 +3,8 @@ def fun2(q,i):
     print('子进程%s 开始put数据' %i)
     print(q.get())
 def fun1(q,i):
-    fun2(q,i)
+    while True:
+        fun2(q,i)
 
 if __name__ == '__main__':
     q = Queue()
