@@ -1,21 +1,20 @@
-from asyncio import Handle
-from re import X
-from turtle import width
 import cv2
-import socket
 from cvzone.HandTrackingModule import HandDetector
 import time
-import math
 import threading
 # from matplotlib.pyplot import draw
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Process,Queue
 
-import pyqt5graph
+import process.pyqt5graph as pyqt5graph
 from PyQt5.Qt import *
-from pyqtgraph import PlotWidget
-from PyQt5 import QtCore
+
+import process.data2sound as data2sound
+
+from process.observer import observe
+from process.pyqt5graph import qtplot
+from process.data2sound import playaudio
 
 forefinger_campos_list = []
 forefinger_pos_list = []
@@ -32,87 +31,9 @@ threadLock = threading.Lock()
 #param
 width,height = 640,480
 
-def observeVelocityFilter(campos, last_campos, delta_time,last_camv):
-    if delta_time != 0.0:
-        cam_vx = (campos[0] - last_campos[0]) / delta_time
-        cam_vy = (campos[1] - last_campos[1])/ delta_time
-        cam_vz = (campos[2] - last_campos[2])/ delta_time
-        cam_v =  np.array([cam_vx,cam_vy, cam_vz])
-        cam_v = (0.2* cam_v + last_camv * 0.8).copy()
-        last_camv = cam_v.copy() 
-    else:
-        cam_v = last_camv.copy() 
-    return cam_v
 
-def observeAcceleratorFilter(cam_v,last_camv,delta_time,last_cama):
-    if delta_time != 0.0:
-        cam_ax = (cam_v[0] - last_camv[0]) / delta_time
-        cam_ay = (cam_v[1] - last_camv[1])/ delta_time
-        cam_az = (cam_v[2] - last_camv[2])/ delta_time
-        cam_a = (0.2 * np.array([cam_ax,cam_ay, cam_az]) + 0.8 * last_cama).copy()
-        last_cama = cam_a.copy()
-    else:
-        cam_a = last_cama.copy() 
-    return cam_a
 
-def calculate(campos,delta_time,last_campos,last_camv, last_cama):
-    # print(campos,delta_time,last_campos,last_camv)
-    cam_v = observeVelocityFilter(campos, last_campos, delta_time,last_camv)
-    cam_a = observeAcceleratorFilter(cam_v,last_camv,delta_time,last_cama)
-    return cam_v,cam_a
 
-#多进程
-def observe(q,qv):
-
-    last_time_slow = time.time_ns()
-    last_time_fast = time.time_ns()
-    campos = np.array([0.0, 0.0, 0.0])
-    last_campos = np.array([0.0, 0.0, 0.0])
-    last_camv = np.array([0.0, 0.0, 0.0])
-    campos_list = []
-    camv_list = []
-    last_cama = np.array([0.0, 0.0, 0.0])
-    cam_v = 0
-    cam_a = 0
-    campos_pred = np.array([0.0, 0.0, 0.0])
-    camv_pred = np.array([0.0, 0.0, 0.0])
-    data=open("data.txt",'w+') 
-    while True: 
-        current_time = time.time_ns()
-        if q.empty() == False :
-            delta_time = (current_time - last_time_slow)/10e5 # ms
-            campos = q.get()
-            campos_list.append(campos)
-            cam_v,cam_a = calculate(campos,delta_time,last_campos,last_camv, last_cama)
-            last_time_slow = current_time
-            last_campos = campos.copy()
-            campos_pred = campos
-            camv_pred = cam_v
-        else:
-            delta_time = (current_time - last_time_fast)/10e5 # ms
-            campos_pred = campos_pred + cam_v * delta_time
-            camv_pred = camv_pred + camv_pred * cam_a
-            
-            last_time_fast = current_time
-        v = np.sqrt((camv_pred*camv_pred).sum())
-        camv_list.append(v)
-        qv.put(v)
-        if(qv.qsize() > 10):
-            qv.get()
-        if len(camv_list) > 100:
-            del(camv_list[0])
-
-def qtplot(qv:Queue):
-    import sys
-    # PyQt5 程序固定写法
-    app = QApplication(sys.argv)
-
-    # 将绑定了绘图控件的窗口实例化并展示
-    window = pyqt5graph.Window(qv)
-    window.show()
-
-    # PyQt5 程序固定写法
-    sys.exit(app.exec())
 
 def velocityFilter(forefinger_pos, last_point, delta_time):
     forefinger_v_x = (forefinger_pos[0] - last_point[0]) / delta_time
@@ -178,11 +99,9 @@ def plotdata():
         plt.pause(0.01)
 
 def Main():
-    # plt.ion()
-    # plt.figure(1)
     q = Queue()
     qv = Queue()
-    z_cam = 470
+    z_cam = 470 #mm
     camera_matrix = np.zeros((3, 3))
     camera_matrix[0, 0] = 609.592345495693
     camera_matrix[1, 1] = 608.224584386026
@@ -203,8 +122,10 @@ def Main():
     current_time = 0
     p = Process(target=observe,args=(q,qv))
     plot = Process(target=qtplot,args=(qv,))
+    audio = Process(target=playaudio,args=(qv,))
     p.start()
     plot.start()
+    # audio.start()
     while True:
         success,img = cap.read()
         img = cv2.undistort(img,camera_matrix,distCoeffs)
@@ -236,8 +157,9 @@ def Main():
             if(len(mean_v_list) > 30): # save 30 mean_v
                 mean_v_list = np.delete(mean_v_list,0,axis=0)
             drawTrace(mean_v_list,img)
-            # plotdata()
-
+            # plotdata() #matplot show trace
+        else:
+            q.put(np.array([0,0,0]))
         # img=cv2.resize(img,(0,0),None,0.5,0.5)
         last_time = current_time
         cv2.imshow("image",img)

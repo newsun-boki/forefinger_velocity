@@ -173,7 +173,7 @@ def Main():
     current_time = 0
     observer = Observer(1,"Observer",0.1)
     observer.setDaemon(True)
-    # observer.start()
+    observer.start()
     while True:
         success,img = cap.read()
         img = cv2.undistort(img,camera_matrix,distCoeffs)

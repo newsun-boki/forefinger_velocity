@@ -19,7 +19,7 @@ class Window(QWidget):
 
         # 仿写 mode1 代码中的数据
         # 生成 300 个正态分布的随机数
-        self.data1 = np.random.normal(size=300)
+        self.data1 = np.random.normal(size=100)
         self.qv = qv
         self.vs = []
         self.curve1 = self.plotWidget_ted.plot(self.data1, name="mode1")
@@ -35,12 +35,24 @@ class Window(QWidget):
     def update_data(self):
         if self.qv.empty() == False:
             v = self.qv.get()
+            print(v)
             self.vs.append(v)
-            if len(self.vs) > 300:
-                del(self[0]
+            if len(self.vs) > 100:
+                del(self.vs[0])
         # 数据填充到绘制曲线中
             self.curve1.setData(self.vs)
 
+def qtplot(qv):
+    import sys
+    # PyQt5 程序固定写法
+    app = QApplication(sys.argv)
+
+    # 将绑定了绘图控件的窗口实例化并展示
+    window = Window(qv)
+    window.show()
+
+    # PyQt5 程序固定写法
+    sys.exit(app.exec())
 
 if __name__ == '__main__':
     import sys
