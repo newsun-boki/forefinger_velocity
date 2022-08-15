@@ -10,7 +10,7 @@ import threading
 # from matplotlib.pyplot import draw
 import numpy as np
 import matplotlib.pyplot as plt
-
+from multiprocessing import Process,Queue
 forefinger_campos_list = []
 forefinger_pos_list = []
 forefinger_v_list = np.array([0.0, 0.0, 0.0])
@@ -25,65 +25,74 @@ delta_time = 0
 threadLock = threading.Lock()
 #param
 width,height = 640,480
-class Observer(threading.Thread):
-    def __init__(self, threadID, name, delay):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-        self.delay = delay
-        self.points = []
-        self.last_time = 0
-        self.pred = 0
-        self.main_point = np.array([0,0,0]);
-        self.main_v = np.array([0,0,0]);
-        self.pred_v = 0
-    def calculatePoints(self):
-        global mean_a
-        if(len(forefinger_pos_list) > 1):
-            current_time = time.time_ns()
-            delta_time = (current_time - self.last_time)/10e6;
-            if(delta_time > 0):
-                current_point = np.array(forefinger_pos_list[-1])
-                current_mean_v = np.array(mean_v_list[-1])
-                current_mean_a = np.array(mean_a)
-                if(self.main_point[0] != current_point[0]):
-                    self.main_point = current_point
-                    self.main_v = current_mean_v
-                    self.pred = current_point + current_mean_v * delta_time 
-                    self.pred_v = current_mean_v + current_mean_a * delta_time
-                    # print(self.pred)
-                else:
-                    self.pred = self.pred + self.pred_v * delta_time + current_mean_a *delta_time *delta_time
-                    self.pred_v = self.pred_v +  current_mean_a * delta_time
-                    print(self.pred_v[1]/self.pred_v[0],current_mean_a[1]/current_mean_a[0])
-                    prev_len = np.sqrt((self.pred_v*self.pred_v).sum())
-                    norm_prev = self.pred_v / prev_len
-                    a_len = np.sqrt((current_mean_a*current_mean_a).sum())
-                    norm_a = current_mean_a / a_len
-                    prev = 0.95 * norm_prev + 0.05 * norm_a
-                    self.pred_v = prev / np.sqrt((prev*prev).sum()) * np.sqrt((self.pred_v*self.pred_v).sum())
 
-                    
-                # threadLock.acquire()
-                if(abs(self.pred[0]) < 2e3):
-                    # print(self.pred)
-                    smooth_pos_list.append(self.pred)
-                    smooth_v_list.append(self.pred_v)
-                if(len(smooth_pos_list) > 500):
-                    del(smooth_pos_list[0])
-                if(len(smooth_v_list) > 500):
-                    del(smooth_v_list[0])
-                # threadLock.release()
-                self.last_time = current_time
-    def smoothPlot():
-        v = smooth_v_list[-1]
-        v = np.sqrt((v*v).sum())  * 35
-        img = cv2.circle(img,(int(p[0]),int(p[1])),4,(255 - int(v),0,int(v)),-1)
-    def run(self):
-        while True:
-            # print ("开始线程：" + self.name)
-            self.calculatePoints()
+def observeVelocityFilter(campos, last_campos, delta_time,last_camv):
+    if delta_time != 0.0:
+        cam_vx = (campos[0] - last_campos[0]) / delta_time
+        cam_vy = (campos[1] - last_campos[1])/ delta_time
+        cam_vz = (campos[2] - last_campos[2])/ delta_time
+        cam_v =  np.array([cam_vx,cam_vy, cam_vz])
+        cam_v = (0.2* cam_v + last_camv * 0.8).copy()
+        last_camv = cam_v.copy() 
+    else:
+        cam_v = last_camv.copy() 
+    return cam_v
+
+def observeAcceleratorFilter(cam_v,last_camv,delta_time,last_cama):
+    if delta_time != 0.0:
+        cam_ax = (cam_v[0] - last_camv[0]) / delta_time
+        cam_ay = (cam_v[1] - last_camv[1])/ delta_time
+        cam_az = (cam_v[2] - last_camv[2])/ delta_time
+        cam_a = (0.2 * np.array([cam_ax,cam_ay, cam_az]) + 0.8 * last_cama).copy()
+        last_cama = cam_a.copy()
+    else:
+        cam_a = last_cama.copy() 
+    return cam_a
+
+def calculate(campos,delta_time,last_campos,last_camv, last_cama):
+    # print(campos,delta_time,last_campos,last_camv)
+    cam_v = observeVelocityFilter(campos, last_campos, delta_time,last_camv)
+    cam_a = observeAcceleratorFilter(cam_v,last_camv,delta_time,last_cama)
+    return cam_v,cam_a
+
+#多进程
+def observe(q):
+
+    last_time_slow = time.time_ns()
+    last_time_fast = time.time_ns()
+    campos = np.array([0.0, 0.0, 0.0])
+    last_campos = np.array([0.0, 0.0, 0.0])
+    last_camv = np.array([0.0, 0.0, 0.0])
+    campos_list = []
+    camv_list = []
+    last_cama = np.array([0.0, 0.0, 0.0])
+    cam_v = 0
+    cam_a = 0
+    campos_pred = np.array([0.0, 0.0, 0.0])
+    camv_pred = np.array([0.0, 0.0, 0.0])
+    data=open("data.txt",'w+') 
+    while True: 
+        current_time = time.time_ns()
+        if q.empty() == False :
+            delta_time = (current_time - last_time_slow)/10e5 # ms
+            campos = q.get()
+            campos_list.append(campos)
+            cam_v,cam_a = calculate(campos,delta_time,last_campos,last_camv, last_cama)
+            last_time_slow = current_time
+            last_campos = campos.copy()
+            campos_pred = campos
+            camv_pred = cam_v
+        else:
+            delta_time = (current_time - last_time_fast)/10e5 # ms
+            campos_pred = campos_pred + cam_v * delta_time
+            camv_pred = camv_pred + camv_pred * cam_a
             
+            last_time_fast = current_time
+        v = np.sqrt((camv_pred*camv_pred).sum())
+        camv_list.append(v)
+        print(v)
+        if len(camv_list) > 100:
+            del(camv_list[0])
 
 def velocityFilter(forefinger_pos, last_point, delta_time):
     forefinger_v_x = (forefinger_pos[0] - last_point[0]) / delta_time
@@ -97,9 +106,8 @@ def velocityFilter(forefinger_pos, last_point, delta_time):
     last_point[0] = forefinger_pos[0]
     last_point[1] = forefinger_pos[1]
     last_point[2] = forefinger_pos[2]
-
-    # accelerator
     return mean_v
+    # accelerator 
 def acceleratorFilter(mean_v, last_v, delta_time):
     forefinger_a_x = (mean_v[0] - last_v[0]) / delta_time
     forefinger_a_y = (mean_v[1] - last_v[1])/ delta_time
@@ -150,8 +158,9 @@ def plotdata():
         plt.pause(0.01)
 
 def Main():
-    plt.ion()
-    plt.figure(1)
+    # plt.ion()
+    # plt.figure(1)
+    q = Queue()
     z_cam = 470
     camera_matrix = np.zeros((3, 3))
     camera_matrix[0, 0] = 609.592345495693
@@ -171,9 +180,8 @@ def Main():
     global delta_time
     global mean_a
     current_time = 0
-    observer = Observer(1,"Observer",0.1)
-    observer.setDaemon(True)
-    # observer.start()
+    p = Process(target=observe,args=(q,))
+    p.start()
     while True:
         success,img = cap.read()
         img = cv2.undistort(img,camera_matrix,distCoeffs)
@@ -191,6 +199,7 @@ def Main():
                 del(forefinger_pos_list[0])
             x_cam, y_cam = pixel2cam(forefinger_pos,z_cam,camera_matrix)
             forefinger_campos = [x_cam,y_cam,z_cam]
+            q.put(np.array(forefinger_campos))
             forefinger_campos_list.append(forefinger_campos)
             #get timestamp 
             current_time = time.time_ns() 
