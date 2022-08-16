@@ -44,11 +44,11 @@
 
 使用matplotlib实时显示食指运动轨迹，同样线的颜色会随着手的速度变化。
   
-![](https://media.giphy.com/media/U0S6N5Hoc0movzd6KI/giphy.gif)
+![](https://media.giphy.com/media/5fbrq8LncPV2dYy0VR/giphy.gif)
 
 使用qt绘制出手部数据的实时曲线
 
-![](https://media.giphy.com/media/gvnhA8defsQp7BeJSi/giphy-downsized-large.gif)
+![](https://media.giphy.com/media/HZnuIiXFklGgucrVAA/giphy.gif)
 
 ### VI.多线程
 一开始尝试的是使用多线程，但python多线程并不能完整的利用CPU内存资源，会造成主进程卡顿，但多线程下数据交互方便可作为可作可视化预测验证。
