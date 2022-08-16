@@ -69,7 +69,6 @@ def observe(q,qv):
             v = 0.0
         if v < 1:
             camv_list.append(v)
-            print(v)
             qv.put(v)
             if(qv.qsize() > 10):
                 qv.get()

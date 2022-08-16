@@ -6,7 +6,6 @@ from PyQt5 import QtCore
 import numpy as np
 import pyqtgraph as pq
 
-
 class Window(QWidget):
     def __init__(self,qv):
         super().__init__()
@@ -27,11 +26,11 @@ class Window(QWidget):
         # 设定定时器
         self.timer = pq.QtCore.QTimer()
         # 定时器信号绑定 update_data 函数
-        self.timer.timeout.connect(self.update_data)
+        self.timer.timeout.connect(self.show_audio)
+        # self.timer.timeout.connect(self.update_data)
         # 定时器间隔50ms，可以理解为 50ms 刷新一次数据
         self.timer.start(50)
 
-    # 数据左移
     def update_data(self):
         if self.qv.empty() == False:
             v = self.qv.get()
@@ -41,6 +40,28 @@ class Window(QWidget):
                 del(self.vs[0])
         # 数据填充到绘制曲线中
             self.curve1.setData(self.vs)
+    def sine(self,frequency, t, sampleRate):
+        '''
+        產生 sin wave
+    
+        :Args:
+        - frequency: 欲產生的頻率 Hz
+        - t: 播放時間長度 seconds
+        - sampleRate: 取樣頻率 1/s
+        '''
+        # 播放數量
+        n = int(t * sampleRate)
+        # 每秒轉動的角度再細分為取樣間隔
+        interval = 2 * np.pi * frequency / sampleRate
+        return np.sin(np.arange(n) * interval)
+
+    def show_audio(self):
+        if self.qv.empty() == False:
+            v = self.qv.get()
+            data = self.sine(v * 1000,0.1,44100)
+            print(data)
+        # 数据填充到绘制曲线中
+            self.curve1.setData(data)
 
 def qtplot(qv):
     import sys

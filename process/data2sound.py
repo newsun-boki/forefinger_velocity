@@ -20,7 +20,7 @@ def sine(frequency, t, sampleRate):
     return np.sin(np.arange(n) * interval)
  
  
-def play_tone(stream, frequency=440, t=1, sampleRate=14100):
+def play_tone(stream, frequency=440, t=1, sampleRate=44100):
     '''
     播放特定頻率
  
