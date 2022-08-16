@@ -52,3 +52,4 @@
 
 ### VI.多线程
 一开始尝试的是使用多线程，但python多线程并不能完整的利用CPU内存资源，会造成主进程卡顿，但多线程下数据交互方便可作为可作可视化预测验证。
+![](https://media.giphy.com/media/ewtubEHnABGMRFYIlM/giphy-downsized-large.gif)
