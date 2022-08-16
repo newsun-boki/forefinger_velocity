@@ -44,7 +44,7 @@
 
 使用matplotlib实时显示食指运动轨迹，同样线的颜色会随着手的速度变化。
   
-![](https://media.giphy.com/media/5fbrq8LncPV2dYy0VR/giphy.gif)
+![](https://media.giphy.com/media/U0S6N5Hoc0movzd6KI/giphy.gif)
 
 使用qt绘制出手部数据的实时曲线
 
