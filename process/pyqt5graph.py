@@ -26,8 +26,8 @@ class Window(QWidget):
         # 设定定时器
         self.timer = pq.QtCore.QTimer()
         # 定时器信号绑定 update_data 函数
-        self.timer.timeout.connect(self.show_audio)
-        # self.timer.timeout.connect(self.update_data)
+        # self.timer.timeout.connect(self.show_audio)
+        self.timer.timeout.connect(self.update_data)
         # 定时器间隔50ms，可以理解为 50ms 刷新一次数据
         self.timer.start(50)
 
