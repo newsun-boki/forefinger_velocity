@@ -53,3 +53,22 @@
 ### VI.多线程
 一开始尝试的是使用多线程，但python多线程并不能完整的利用CPU内存资源，会造成主进程卡顿，但多线程下数据交互方便可作为可作可视化预测验证。
 ![](https://media.giphy.com/media/ewtubEHnABGMRFYIlM/giphy-downsized-large.gif)
+
+### VII. VR应用
+
+关于VR应用方面的开发，使用Unity软件，VR平台为Oculus Quest2。
+
+Oculus Quest2的手部追踪模块经过较长时间的迭代，现在已经较为成熟。因此直接使用其手部追踪SDK进行交互。
+
++ 使用Unity版本为2021.3.8
++ 关于Quest2开发可以参考[硬核VR王师傅的视频](https://www.bilibili.com/video/BV1K44y1g7rV?spm_id_from=333.999.0.0&vd_source=844aa2e2a98f27901167075e5900304d)
+
+[演示视频](https://drive.google.com/file/d/17ALWLSyz5y8AhINUjESR_ePDkdBubOe7/view?usp=sharing)
+
+[unity文件](https://drive.google.com/file/d/1GJD1QhX4P5a2QuyETdyuYbvL4_MJeVcW/view)
+
+运行时需要同时运行unity应用以及
+```python
+python mutiProcessUnity.py
+```
+该文件与`mutiProcessMain.py`类似。
