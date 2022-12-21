@@ -65,7 +65,7 @@ def observe(q,qv):
             
             last_time_fast = current_time
         v = np.sqrt((camv_pred*camv_pred).sum())
-        print(v)
+        # print(v)
         if v < 0.01:
             v = 0.0
         if v < 1:

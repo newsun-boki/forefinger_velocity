@@ -59,7 +59,7 @@ class Window(QWidget):
         if self.qv.empty() == False:
             v = self.qv.get()
             data = self.sine(v * 1000,0.1,44100)
-            print(data)
+            # print(data)
         # 数据填充到绘制曲线中
             self.curve1.setData(data)
 

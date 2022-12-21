@@ -124,8 +124,8 @@ def Main():
     plot = Process(target=qtplot,args=(qv,))
     audio = Process(target=playaudio,args=(qv,))
     p.start()
-    plot.start()
-    # audio.start()
+    # plot.start()
+    audio.start()
     while True:
         success,img = cap.read()
         img = cv2.undistort(img,camera_matrix,distCoeffs)

@@ -3,7 +3,9 @@
 '''
 import numpy as np
 import pyaudio
- 
+import socket
+import _thread
+volume = 0
 def sine(frequency, t, sampleRate):
     '''
     產生 sin wave
@@ -20,7 +22,7 @@ def sine(frequency, t, sampleRate):
     return np.sin(np.arange(n) * interval)
  
  
-def play_tone(stream, frequency=440, t=1, sampleRate=44100):
+def play_tone(stream, volume,frequency=440, t=1, sampleRate=44100):
     '''
     播放特定頻率
  
@@ -33,20 +35,36 @@ def play_tone(stream, frequency=440, t=1, sampleRate=44100):
     data = sine(frequency, t, sampleRate)
     
     # 因 format 為  pyaudio.paFloat32，故轉換為 np.float32 並轉換為 bytearray
-    stream.write(data.astype(np.float32).tostring())
+    stream.write(volume* data.astype(np.float32).tostring())
+    print("volume")
+    print(volume)
  
-def get_v(v,stream):
-    print(v*1000)
-    play_tone(stream,frequency= v* 1000,t = 0.001)
+def get_v(v,stream,volume):
+    # print(v*1000)
+    play_tone(stream,volume,frequency= v* 1000,t = 0.001)
+
+def getVolume( threadName):
+    ip_port = ('127.0.0.1', 9999)
+    sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
+    sk.bind(ip_port)
+    global volume
+    while True:
+        volume = int(sk.recv(1024).strip().decode())
 
 def playaudio(qv):
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paFloat32,
                     channels=1, rate=44100, output=True)
+    
+    try:
+        _thread.start_new_thread( getVolume, ("Thread-1", ) )
+    except:
+        print ("Error: 无法启动线程")
+    global volume
     while True:
         if qv.empty() == False:
             v = qv.get()
-            get_v(v,stream)
+            get_v(v,stream,volume)
 if __name__ == '__main__':
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paFloat32,
